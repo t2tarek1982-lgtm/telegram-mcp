@@ -11,7 +11,6 @@ logger = logging.getLogger(__name__)
 
 mcp = FastMCP("telegram-mcp")
 
-
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN", "")
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "")
 
