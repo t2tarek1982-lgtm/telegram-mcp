@@ -1,21 +1,24 @@
 import os
 import logging
-import requests
 from contextlib import asynccontextmanager
+
+import requests
 from fastapi import FastAPI, HTTPException
 from mcp.server.fastmcp import FastMCP
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Initialize FastMCP server with session manager
 mcp = FastMCP("telegram-mcp")
+
 
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN", "")
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "")
 
+
 def telegram_configured():
     return bool(TELEGRAM_TOKEN and TELEGRAM_CHAT_ID)
+
 
 @mcp.tool()
 def telegram_status() -> str:
@@ -23,6 +26,7 @@ def telegram_status() -> str:
     if telegram_configured():
         return "Telegram bot is configured."
     return "Telegram bot is not configured."
+
 
 @mcp.tool()
 def send_telegram_message(message: str) -> str:
@@ -38,9 +42,9 @@ def send_telegram_message(message: str) -> str:
             url,
             json={
                 "chat_id": TELEGRAM_CHAT_ID,
-                "text": message
+                "text": message,
             },
-            timeout=15
+            timeout=15,
         )
 
         data = response.json()
@@ -56,52 +60,54 @@ def send_telegram_message(message: str) -> str:
         logger.error("Telegram connection error: %s", e)
         return f"Connection error: {e}"
 
-# Setup lifespan context for FastAPI and MCP
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Startup
-    async with mcp.session_manager():
+    async with mcp.session_manager.run():
         yield
-    # Shutdown
 
-# Create FastAPI app with lifespan
+
 app = FastAPI(lifespan=lifespan)
 
-# Mount FastMCP at /mcp using streamable HTTP
 mcp_app = mcp.streamable_http_app()
 app.mount("/mcp", mcp_app)
 
-# REST API endpoints
+
 @app.get("/")
 def home():
     return {
         "status": "Telegram MCP Server is running",
-        "telegram_configured": telegram_configured()
+        "telegram_configured": telegram_configured(),
+        "mcp_endpoint": "/mcp",
     }
+
 
 @app.get("/health")
 def health():
     return {
         "ok": True,
-        "telegram_configured": telegram_configured()
+        "telegram_configured": telegram_configured(),
     }
+
 
 @app.get("/config")
 def config():
     return {
         "token_set": bool(TELEGRAM_TOKEN),
         "chat_id_set": bool(TELEGRAM_CHAT_ID),
-        "configured": telegram_configured()
+        "configured": telegram_configured(),
     }
+
 
 @app.post("/send-message")
 def send_message(text: str):
     result = send_telegram_message(text)
 
-    if result.startswith("❌"):
+    if result != "Telegram message sent successfully.":
         raise HTTPException(status_code=400, detail=result)
 
     return {"message": result}
+
 
 if __name__ == "__main__":
     import uvicorn
@@ -109,5 +115,5 @@ if __name__ == "__main__":
     uvicorn.run(
         app,
         host="0.0.0.0",
-        port=int(os.getenv("PORT", "8000"))
+        port=int(os.getenv("PORT", "8000")),
     )
