@@ -1,13 +1,14 @@
 import os
 import logging
 import requests
+from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException
 from mcp.server.fastmcp import FastMCP
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-app = FastAPI()
+# Initialize FastMCP server with session manager
 mcp = FastMCP("telegram-mcp")
 
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN", "")
@@ -15,28 +16,6 @@ TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "")
 
 def telegram_configured():
     return bool(TELEGRAM_TOKEN and TELEGRAM_CHAT_ID)
-
-@app.get("/")
-def home():
-    return {
-        "status": "Telegram MCP Server is running",
-        "telegram_configured": telegram_configured()
-    }
-
-@app.get("/health")
-def health():
-    return {
-        "ok": True,
-        "telegram_configured": telegram_configured()
-    }
-
-@app.get("/config")
-def config():
-    return {
-        "token_set": bool(TELEGRAM_TOKEN),
-        "chat_id_set": bool(TELEGRAM_CHAT_ID),
-        "configured": telegram_configured()
-    }
 
 @mcp.tool()
 def telegram_status() -> str:
@@ -76,6 +55,44 @@ def send_telegram_message(message: str) -> str:
     except requests.RequestException as e:
         logger.error("Telegram connection error: %s", e)
         return f"Connection error: {e}"
+
+# Setup lifespan context for FastAPI and MCP
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup
+    async with mcp.session_manager():
+        yield
+    # Shutdown
+
+# Create FastAPI app with lifespan
+app = FastAPI(lifespan=lifespan)
+
+# Mount FastMCP at /mcp using streamable HTTP
+mcp_app = mcp.streamable_http_app()
+app.mount("/mcp", mcp_app)
+
+# REST API endpoints
+@app.get("/")
+def home():
+    return {
+        "status": "Telegram MCP Server is running",
+        "telegram_configured": telegram_configured()
+    }
+
+@app.get("/health")
+def health():
+    return {
+        "ok": True,
+        "telegram_configured": telegram_configured()
+    }
+
+@app.get("/config")
+def config():
+    return {
+        "token_set": bool(TELEGRAM_TOKEN),
+        "chat_id_set": bool(TELEGRAM_CHAT_ID),
+        "configured": telegram_configured()
+    }
 
 @app.post("/send-message")
 def send_message(text: str):
