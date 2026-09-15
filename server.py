@@ -124,7 +124,7 @@ def send_message(text: str):
     result = send_telegram_message(text)
 
     return {"message": result}
-
+app.mount("/mcp", mcp.streamable_http_app())
 if __name__ == "__main__":
     import uvicorn
 
