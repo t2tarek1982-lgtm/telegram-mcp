@@ -85,7 +85,8 @@ def send_message(text: str):
         raise HTTPException(status_code=400, detail=result)
 
     return {"message": result}
-
+mcp_app = mcp.streamable_http_app()
+app.mount("/mcp", mcp_app)
 if __name__ == "__main__":
     import uvicorn
 
